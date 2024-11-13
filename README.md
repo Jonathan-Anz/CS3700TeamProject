@@ -9,3 +9,5 @@ To change vertices (number at the end):
 mpirun python3.4 dijkstra_mpi.py 64
 
 As of now, the default is 64 vertices on 4 processors
+
+To run: make sure dijkstra_mpi.py is executable, and submit the batch file using $ sbatch run_dijkstra_mpi.sh
