@@ -116,9 +116,6 @@ graph = [   [0, 4, 0, 0, 0, 0, 0, 8, 0],
             [0, 0, 2, 0, 0, 0, 6, 7, 0] ]
 '''
 
-# Create random graph
-graph = GenerateAdjacencyMatrix(numVertices)
-
 # Start vertex (must be changed manually)
 source = 0
 
@@ -138,10 +135,18 @@ comm = MPI.COMM_WORLD
 myID = comm.Get_rank()
 size = comm.Get_size()
 
-# Print out matrix
+# Generate and print out matrix
 if myID == 0:
+    # Create random graph
+    graph = GenerateAdjacencyMatrix(numVertices)
+
     print("\nAdjacency matrix:")
     print(numpy.matrix(graph))
+else:
+    graph = []
+
+# Give every node a copy of the adjacency matrix
+graph = comm.bcast(graph, root = 0)
 
 # Timer
 if myID == 0:
@@ -211,7 +216,7 @@ if myID == 0:
     print("Total processors:", size)
 
     # Random target, make sure it's not the start vertex
-    target = random.randint(1, numVertices)
+    target = random.randint(1, numVertices - 1)
     print("\nStart vertex:", source)
     print("End vertex:", target)
     print("Shortest path cost: ", int(distances[target]))
