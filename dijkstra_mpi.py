@@ -6,13 +6,13 @@ import numpy
 from mpi4py import MPI
 
 # Function to randomly generate an adjacency matrix
-def GenerateAdjacencyMatrix(numVertices):
+def GenerateAdjacencyMatrix(numVertices, startIndeex, endIndex):
 
     # Initialize the graph with all 0s
     g = [[0 for i in range(numVertices)] for j in range(numVertices)]
 
     # Loop through half of the matrix (only half because it's not a directed graph)
-    for i in range(numVertices):
+    for i in range(startIndeex, endIndex):
 
         # Bool to check if no edges were generated for this vertex
         connectedToGraph = False
@@ -30,7 +30,7 @@ def GenerateAdjacencyMatrix(numVertices):
                 weight = random.randint(1, 20)
 
             g[i][j] = weight
-            g[j][i] = weight
+            #g[j][i] = weight (These values are currently unused by the merging algorithm)
 
         # If no edges were generated for this vertex (it is not connected to the graph)
         if not connectedToGraph:
@@ -38,9 +38,24 @@ def GenerateAdjacencyMatrix(numVertices):
             # Find a random vertex that is not itself and assign an edge
             otherVertex = (i + random.randint(1, numVertices - 1)) % numVertices
             g[i][otherVertex] = random.randint(1, 20)
-            g[otherVertex][i] = g[i][otherVertex]
+            #g[otherVertex][i] = g[i][otherVertex]
 
     return g
+
+# Function that merges the given partially-filled matrices and returns a fully-filled adjacency matrix
+def MergeAdjacencyMatrices(graph, subGraphs):
+
+    numVertices = len(subGraphs[0])
+
+    # Loop through each partial matrix
+    for i in range(len(subGraphs)):
+        for j in range(numVertices):
+            for k in range(j + 1, numVertices):
+                if subGraphs[i][j][k] != 0:
+                    graph[j][k] = subGraphs[i][j][k]
+                    graph[k][j] = subGraphs[i][j][k]
+
+    return graph
 
 # Function to get the local closest unvisited vertex to the source through the already visited vertices 
 # (also returns distance for mpi reduce)
@@ -135,22 +150,9 @@ comm = MPI.COMM_WORLD
 myID = comm.Get_rank()
 size = comm.Get_size()
 
-# Generate and print out matrix
+# Start the graph generation timer
 if myID == 0:
-    # Create random graph
-    graph = GenerateAdjacencyMatrix(numVertices)
-
-    print("\nAdjacency matrix:")
-    print(numpy.matrix(graph))
-else:
-    graph = []
-
-# Give every node a copy of the adjacency matrix
-graph = comm.bcast(graph, root = 0)
-
-# Timer
-if myID == 0:
-    startTime = MPI.Wtime()
+    genStartTime = MPI.Wtime()
 
 # Split graph into subgraphs for each processor (distribute remainder if there is any)
 verticesPerProcessor = numVertices // size
@@ -165,6 +167,28 @@ if myID < remainder:
 else:
     startIndex = (myID * verticesPerProcessor) + remainder
     endIndex = startIndex + verticesPerProcessor
+
+# Have each node generate a portion of the adjacency matrix
+partialGraph = GenerateAdjacencyMatrix(numVertices, startIndex, endIndex)
+graph = []
+pGraphs = comm.gather(partialGraph, root = 0)
+
+if myID == 0:
+    # Combine the partial matrices
+    graph = [[0 for i in range(numVertices)] for j in range(numVertices)]
+    MergeAdjacencyMatrices(graph, pGraphs)
+
+# Give every node a copy of the complete adjacency matrix
+graph = comm.bcast(graph, root = 0)
+
+if myID == 0:
+    print("\nAdjacency matrix:")
+    print(numpy.matrix(graph))
+
+# Stop the graph generation timer and start the Dijkstra timer
+if myID == 0:
+    genEndTime = MPI.Wtime()
+    pathStartTime = MPI.Wtime()
 
 # Print out the vertex range each processor is working on (for debugging only)
 #print("Processor %d is working on vertices %d to %d. Total count: %d" %(myID, startIndex, endIndex - 1, endIndex - startIndex))
@@ -209,8 +233,9 @@ while len(unvisited) != 0:
 if myID == 0:
 
     # Timer
-    endTime = MPI.Wtime()
-    elapsedTime = endTime - startTime
+    pathEndTime = MPI.Wtime()
+    genElapsedTime = genEndTime - genStartTime
+    pathElapsedTime = pathEndTime - pathStartTime
 
     print("\nVertices:", numVertices)
     print("Total processors:", size)
@@ -222,7 +247,8 @@ if myID == 0:
     print("Shortest path cost: ", int(distances[target]))
     #PrintAllPaths(distances, parents) (for debugging only)
 
-    # Print time
-    print("\nExecution time: %.8f seconds\n" %(elapsedTime))
+    # Print times
+    print("\nGraph generation time: %.8f seconds" %(genElapsedTime))
+    print("Pathfinding time: %.8f seconds\n" %(pathElapsedTime))
 
 # END OF MAIN()
