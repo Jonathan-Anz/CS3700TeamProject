@@ -135,6 +135,10 @@ comm = MPI.COMM_WORLD
 myID = comm.Get_rank()
 size = comm.Get_size()
 
+# Start the graph generation timer
+if myID == 0:
+    genStartTime = MPI.Wtime()
+
 # Generate and print out matrix
 if myID == 0:
     # Create random graph
@@ -148,9 +152,10 @@ else:
 # Give every node a copy of the adjacency matrix
 graph = comm.bcast(graph, root = 0)
 
-# Timer
+# Stop the graph generation timer and start the Dijkstra timer
 if myID == 0:
-    startTime = MPI.Wtime()
+    genEndTime = MPI.Wtime()
+    pathStartTime = MPI.Wtime()
 
 # Split graph into subgraphs for each processor (distribute remainder if there is any)
 verticesPerProcessor = numVertices // size
@@ -209,8 +214,9 @@ while len(unvisited) != 0:
 if myID == 0:
 
     # Timer
-    endTime = MPI.Wtime()
-    elapsedTime = endTime - startTime
+    pathEndTime = MPI.Wtime()
+    genElapsedTime = genEndTime - genStartTime
+    pathElapsedTime = pathEndTime - pathStartTime
 
     print("\nVertices:", numVertices)
     print("Total processors:", size)
@@ -222,7 +228,8 @@ if myID == 0:
     print("Shortest path cost: ", int(distances[target]))
     #PrintAllPaths(distances, parents) (for debugging only)
 
-    # Print time
-    print("\nExecution time: %.8f seconds\n" %(elapsedTime))
+    # Print times
+    print("\nGraph generation time: %.8f seconds" %(genElapsedTime))
+    print("Pathfinding time: %.8f seconds\n" %(pathElapsedTime))
 
 # END OF MAIN()
